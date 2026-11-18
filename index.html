@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>GestiTrack | Control Operativo de Mantenimiento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22GestiTrack%20Mantenimiento%22%2C%22short_name%22%3A%22GestiTrack%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f1f5f9%22%2C%22theme_color%22%3A%22%230f172a%22%7D">
+    <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .tab-active { background-color: #ffffff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .tab-inactive { color: #64748b; }
+        .tab-inactive:hover { color: #0f172a; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- NAVBAR SUPERIOR -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-inner">
+                    <i class="fa-solid fa-screwdriver-wrench text-xl text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-lg tracking-tight">GestiTrack</h1>
+                        <span id="roleBadge" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            MODO OPERARIO
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">Control Operativo de Mantenimiento e Indicadores</p>
+                </div>
+            </div>
+
+            <!-- CONTROLES DE NAVEGACIÓN -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- Botón visible en Modo Operario -->
+                <button id="btnOpenAdmin" onclick="openPinModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-lock text-amber-400"></i> Acceso Supervisor
+                </button>
+
+                <!-- Botones visibles solo en Modo Supervisor -->
+                <div id="adminControls" class="hidden flex items-center gap-2 flex-wrap">
+                    <button onclick="syncFromExcel()" id="btnSync" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> Sincronizar Excel
+                    </button>
+                    <button onclick="openConfigModal()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-lg transition flex items-center gap-2">
+                        <i class="fa-solid fa-file-excel"></i> Config. Excel / PIN
+                    </button>
+                    <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-lg transition flex items-center gap-2">
+                        <i class="fa-solid fa-download"></i> Descargar CSV
+                    </button>
+                    <button onclick="lockAdmin()" title="Salir de Modo Supervisor" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold px-3 py-2 rounded-lg transition">
+                        <i class="fa-solid fa-right-from-bracket"></i> Salir
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BARRA PARA COMPARTIR LINK A OPERARIOS (SOLO SUPERVISOR) -->
+        <div id="shareBar" class="hidden bg-slate-800/90 border-t border-slate-700/80 px-4 py-2">
+            <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded shrink-0">Link Operarios</span>
+                    <span id="operatorUrlText" class="text-slate-300 truncate font-mono"></span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="copyOperatorLink()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded font-medium transition flex items-center gap-1.5">
+                        <i class="fa-regular fa-copy"></i> Copiar Enlace
+                    </button>
+                    <button onclick="shareWhatsApp()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded font-medium transition flex items-center gap-1.5">
+                        <i class="fa-brands fa-whatsapp"></i> WhatsApp
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+
+        <!-- ========================================================= -->
+        <!-- VISTA 1: MODO OPERARIO (FORMULARIO LIMPIO DE REPORTE)      -->
+        <!-- ========================================================= -->
+        <section id="operatorView" class="max-w-2xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-plus text-blue-400"></i>
+                        <h2 class="font-bold text-base">Registrar Nueva Intervención</h2>
+                    </div>
+                    <span id="excelStatusBadge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        <i class="fa-solid fa-circle text-[8px] text-amber-400 mr-1"></i> Listo para enviar
+                    </span>
+                </div>
+
+                <form id="reportForm" onsubmit="handleReportSubmit(event)" class="p-6 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Fecha y Hora</label>
+                            <input type="datetime-local" id="f_fecha" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Operario / Técnico</label>
+                            <input type="text" id="f_operario" required placeholder="Ej. Juan Pérez" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Zona / Área</label>
+                            <input type="text" id="f_zona" list="zonasList" required placeholder="Ej. Cámara Fría 01" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <datalist id="zonasList">
+                                <option value="Cámara de Frío 1">
+                                <option value="Cámara de Frío 2">
+                                <option value="Cámara de Frío 3">
+                                <option value="Cámara de Frío 4">
+                                <option value="Cámara de Frío 5">
+                                <option value="Cámara de Frío 6">
+                                <option value="Cámara de Frío 7">
+                                <option value="Sala de Máquinas">
+                                <option value="Línea de Proceso">
+                            </datalist>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Equipo / Módulo</label>
+                            <input type="text" id="f_equipo" required placeholder="Ej. Evaporador EV-02" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tipo de Trabajo</label>
+                            <select id="f_tipo" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                <option value="Falla Directa">Falla Directa (Correctivo)</option>
+                                <option value="Mantenimiento Preventivo">Mantenimiento Preventivo</option>
+                                <option value="Inspección / Ajuste">Inspección / Ajuste</option>
+                                <option value="Reparación Estructural">Reparación Estructural</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Estado Actual</label>
+                            <select id="f_estado" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                <option value="Finalizado">Finalizado</option>
+                                <option value="En Proceso">En Proceso</option>
+                                <option value="Pendiente Repuesto">Pendiente Repuesto</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Descripción del Problema / Trabajo Realizado</label>
+                        <textarea id="f_descripcion" rows="3" required placeholder="Detalla la avería, cambios de piezas o tareas ejecutadas..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"></textarea>
+                    </div>
+
+                    <div class="pt-2 flex items-center justify-end gap-3">
+                        <button type="button" onclick="resetForm()" class="px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+                            Limpiar
+                        </button>
+                        <button type="submit" id="btnSubmit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2">
+                            <i class="fa-solid fa-paper-plane"></i> Guardar Registro
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <p class="text-center text-xs text-slate-400 mt-4">
+                Los reportes enviados se archivan automáticamente en la bitácora del supervisor.
+            </p>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 2: MODO SUPERVISOR / ADMINISTRADOR                  -->
+        <!-- ========================================================= -->
+        <section id="supervisorView" class="hidden space-y-6">
+            
+            <!-- PESTAÑAS Y BOTÓN NUEVO REPORTE -->
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button id="tabBtnDashboard" onclick="switchSupervisorTab('dashboard')" class="tab-active px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-blue-600"></i> Indicadores Supervisor
+                    </button>
+                    <button id="tabBtnLogs" onclick="switchSupervisorTab('logs')" class="tab-inactive px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-slate-500"></i> Bitácora de Trabajos (<span id="logCountBadge">0</span>)
+                    </button>
+                    <button id="tabBtnNew" onclick="switchSupervisorTab('new')" class="tab-inactive px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus text-emerald-600"></i> Registrar Reporte
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-4 px-3 text-xs font-medium text-slate-500">
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Finalizados</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> En Proceso</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Repuesto Pendiente</span>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA A: DASHBOARD DE INDICADORES -->
+            <div id="subViewDashboard" class="space-y-6">
+                <!-- TARJETAS KPI -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Intervenciones</p>
+                            <h3 id="kpiTotal" class="text-3xl font-extrabold text-slate-800 mt-1">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Finalizadas</p>
+                            <h3 id="kpiDone" class="text-3xl font-extrabold text-slate-800 mt-1">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-amber-600 uppercase tracking-wider">En Proceso</p>
+                            <h3 id="kpiProcess" class="text-3xl font-extrabold text-slate-800 mt-1">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Pendiente Repuesto</p>
+                            <h3 id="kpiPending" class="text-3xl font-extrabold text-slate-800 mt-1">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRÁFICOS -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <h4 class="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-blue-600"></i> Intervenciones por Zona
+                        </h4>
+                        <div class="relative h-64 w-full">
+                            <canvas id="chartZonas"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <h4 class="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-indigo-600"></i> Tipo de Trabajo / Falla
+                        </h4>
+                        <div class="relative h-64 w-full">
+                            <canvas id="chartTipos"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <h4 class="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-gears text-emerald-600"></i> Top Equipos Intervenidos
+                        </h4>
+                        <div class="relative h-64 w-full">
+                            <canvas id="chartEquipos"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA B: BITÁCORA COMPLETA DE TRABAJOS -->
+            <div id="subViewLogs" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2 flex-1">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+                            <input type="text" id="filterSearch" onkeyup="renderTable()" placeholder="Buscar equipo, operario o falla..." class="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500">
+                        </div>
+                        <select id="filterZona" onchange="renderTable()" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs outline-none">
+                            <option value="">Todas las Zonas</option>
+                        </select>
+                        <select id="filterEstado" onchange="renderTable()" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs outline-none">
+                            <option value="">Todos los Estados</option>
+                            <option value="Finalizado">Finalizado</option>
+                            <option value="En Proceso">En Proceso</option>
+                            <option value="Pendiente Repuesto">Pendiente Repuesto</option>
+                        </select>
+                    </div>
+                    <button onclick="clearLocalCache()" class="text-xs text-rose-600 hover:underline font-medium">
+                        Limpiar caché local
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider border-b border-slate-200">
+                                <th class="py-3 px-4">Fecha / Hora</th>
+                                <th class="py-3 px-4">Zona</th>
+                                <th class="py-3 px-4">Equipo</th>
+                                <th class="py-3 px-4">Tipo</th>
+                                <th class="py-3 px-4">Descripción</th>
+                                <th class="py-3 px-4">Operario</th>
+                                <th class="py-3 px-4">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody" class="divide-y divide-slate-100 text-xs">
+                            <tr>
+                                <td colspan="7" class="py-8 text-center text-slate-400">No hay registros todavía.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- ========================================================= -->
+    <!-- MODAL 1: INGRESO PIN SUPERVISOR                           -->
+    <!-- ========================================================= -->
+    <div id="pinModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-base text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-blue-600"></i> Acceso Supervisor
+                </h3>
+                <button onclick="closePinModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">Ingresa tu PIN de administrador para visualizar los indicadores y el consolidado de planta (PIN inicial: <b>1234</b>).</p>
+            <input type="password" id="pinInput" maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter') verifyPin()" class="w-full text-center tracking-[0.5em] text-xl font-bold py-3 bg-slate-50 border border-slate-300 rounded-xl mb-4 focus:ring-2 focus:ring-blue-500 outline-none">
+            <div class="flex justify-end gap-2">
+                <button onclick="closePinModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                <button onclick="verifyPin()" class="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl">Ingresar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL 2: CONFIGURACIÓN WEBHOOK EXCEL Y PIN                -->
+    <!-- ========================================================= -->
+    <div id="configModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-base text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel text-emerald-600"></i> Conexión con Google Sheets (Excel)
+                </h3>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">URL del Webhook de Google Apps Script (/exec):</label>
+                    <input type="url" id="webhookUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">Al guardar esta URL, podrás compartir el enlace con tus operarios y sus reportes viajarán directo a tu Excel.</p>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Cambiar PIN de Supervisor:</label>
+                    <input type="text" id="newPinInput" maxlength="8" placeholder="Ej. 1234" class="w-36 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-center tracking-widest">
+                </div>
+
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="font-bold text-slate-700">Código para Google Apps Script (Lectura + Escritura):</span>
+                        <button onclick="copyScriptCode()" class="text-blue-600 hover:underline font-semibold">Copiar Código</button>
+                    </div>
+                    <pre id="appsScriptCode" class="bg-slate-900 text-emerald-300 p-3 rounded-lg text-[10px] overflow-x-auto font-mono leading-relaxed">function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["ID", "Fecha", "Zona", "Equipo", "Tipo", "Descripcion", "Operario", "Estado"]);
+  }
+  sheet.appendRow([data.id, data.fecha, data.zona, data.equipo, data.tipo, data.descripcion, data.operario, data.estado]);
+  return ContentService.createTextOutput(JSON.stringify({status: "ok"})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var rows = sheet.getDataRange().getValues();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    result.push({
+      id: rows[i][0], fecha: rows[i][1], zona: rows[i][2], equipo: rows[i][3],
+      tipo: rows[i][4], descripcion: rows[i][5], operario: rows[i][6], estado: rows[i][7]
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+                </div>
+            </div>
+
+            <div class="mt-5 flex justify-end gap-2">
+                <button onclick="closeConfigModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                <button onclick="saveConfig()" class="px-5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">Guardar Configuración</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICACIÓN FLOTANTE (TOAST) -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs font-medium px-4 py-3 rounded-xl shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2.5">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <span id="toastMsg">Operación exitosa</span>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- LÓGICA JAVASCRIPT: FORZADO ESTRICTO A MODO OPERARIO      -->
+    <!-- ========================================================= -->
+    <script>
+        const DEFAULT_WEBHOOK = "";
+        let records = [];
+        let charts = { zonas: null, tipos: null, equipos: null };
+        let isAdmin = false; // POR DEFECTO SIEMPRE INICIA COMO FALSO (MODO OPERARIO)
+
+        document.addEventListener("DOMContentLoaded", () => {
+            setDefaultDateTime();
+            loadConfigFromUrlOrStorage();
+            loadLocalRecords();
+
+            // FUERZA ESTRICTA: Por defecto nadie es admin al entrar al link principal
+            isAdmin = false; 
+            updateUIByRole();
+        });
+
+        function setDefaultDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById("f_fecha").value = now.toISOString().slice(0, 16);
+        }
+
+        function loadConfigFromUrlOrStorage() {
+            const params = new URLSearchParams(window.location.search);
+            const urlWebhook = params.get("wh");
+            if (urlWebhook) {
+                localStorage.setItem("gt_webhook", decodeURIComponent(urlWebhook));
+            }
+            if (!localStorage.getItem("gt_pin")) {
+                localStorage.setItem("gt_pin", "1234");
+            }
+            updateExcelBadge();
+        }
+
+        function getWebhookUrl() {
+            return localStorage.getItem("gt_webhook") || DEFAULT_WEBHOOK;
+        }
+
+        function updateExcelBadge() {
+            const badge = document.getElementById("excelStatusBadge");
+            if (getWebhookUrl()) {
+                badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] text-emerald-400 mr-1"></i> Conectado a Excel';
+            } else {
+                badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] text-amber-400 mr-1"></i> Modo Local (Sin Webhook)';
+            }
+        }
+
+        function loadLocalRecords() {
+            try {
+                const saved = localStorage.getItem("gt_records");
+                records = saved ? JSON.parse(saved) : [];
+            } catch (e) {
+                records = [];
+            }
+        }
+
+        function saveLocalRecords() {
+            localStorage.setItem("gt_records", JSON.stringify(records));
+        }
+
+        // --- ENVIAR NUEVO REPORTE ---
+        async function handleReportSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById("btnSubmit");
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+
+            const rawFecha = document.getElementById("f_fecha").value;
+            const formattedFecha = rawFecha.replace("T", " ");
+
+            const newRecord = {
+                id: "INT-" + Date.now().toString().slice(-6),
+                fecha: formattedFecha,
+                operario: document.getElementById("f_operario").value.trim(),
+                zona: document.getElementById("f_zona").value.trim(),
+                equipo: document.getElementById("f_equipo").value.trim(),
+                tipo: document.getElementById("f_tipo").value,
+                estado: document.getElementById("f_estado").value,
+                descripcion: document.getElementById("f_descripcion").value.trim()
+            };
+
+            records.unshift(newRecord);
+            saveLocalRecords();
+
+            const webhook = getWebhookUrl();
+            if (webhook) {
+                try {
+                    await fetch(webhook, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "text/plain;charset=utf-8" },
+                        body: JSON.stringify(newRecord)
+                    });
+                    showToast("Reporte enviado y archivado en Excel", "success");
+                } catch (err) {
+                    showToast("Guardado localmente (revisa conexión a internet)", "warning");
+                }
+            } else {
+                showToast("Reporte guardado en bitácora local", "success");
+            }
+
+            const opName = document.getElementById("f_operario").value;
+            document.getElementById("reportForm").reset();
+            document.getElementById("f_operario").value = opName;
+            setDefaultDateTime();
+
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+
+            if (isAdmin) {
+                refreshDashboard();
+            }
+        }
+
+        function resetForm() {
+            document.getElementById("reportForm").reset();
+            setDefaultDateTime();
+        }
+
+        // --- SINCRONIZAR DESDE GOOGLE SHEETS (EXCEL) ---
+        async function syncFromExcel() {
+            const webhook = getWebhookUrl();
+            if (!webhook) {
+                showToast("Primero configura la URL de Google Apps Script en Config. Excel", "warning");
+                openConfigModal();
+                return;
+            }
+
+            const btn = document.getElementById("btnSync");
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sincronizando...';
+
+            try {
+                const res = await fetch(webhook);
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    records = data.reverse();
+                    saveLocalRecords();
+                    refreshDashboard();
+                    showToast(`Sincronizados ${records.length} registros desde Excel`, "success");
+                } else {
+                    showToast("El script devolvió un formato inesperado", "warning");
+                }
+            } catch (err) {
+                showToast("No se pudo leer el Excel. Verifica que hayas actualizado el código doGet en Apps Script.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> Sincronizar Excel';
+            }
+        }
+
+        // --- GESTIÓN DE ROLES (SOLO SE ABRE CON PIN DE SUPERVISOR) ---
+        function openPinModal() {
+            document.getElementById("pinInput").value = "";
+            document.getElementById("pinModal").classList.remove("hidden");
+            setTimeout(() => document.getElementById("pinInput").focus(), 100);
+        }
+
+        function closePinModal() {
+            document.getElementById("pinModal").classList.add("hidden");
+        }
+
+        function verifyPin() {
+            const entered = document.getElementById("pinInput").value;
+            const correct = localStorage.getItem("gt_pin") || "1234";
+            if (entered === correct) {
+                isAdmin = true;
+                closePinModal();
+                updateUIByRole();
+                showToast("Bienvenido, Panel de Supervisor desbloqueado", "success");
+                if (getWebhookUrl()) {
+                    syncFromExcel();
+                }
+            } else {
+                showToast("PIN incorrecto", "error");
+            }
+        }
+
+        function lockAdmin() {
+            isAdmin = false;
+            updateUIByRole();
+            showToast("Sesión de supervisor cerrada", "success");
+        }
+
+        function updateUIByRole() {
+            const roleBadge = document.getElementById("roleBadge");
+            const btnOpenAdmin = document.getElementById("btnOpenAdmin");
+            const adminControls = document.getElementById("adminControls");
+            const shareBar = document.getElementById("shareBar");
+            const operatorView = document.getElementById("operatorView");
+            const supervisorView = document.getElementById("supervisorView");
+
+            if (isAdmin) {
+                roleBadge.textContent = "PANEL SUPERVISOR";
+                roleBadge.className = "text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30";
+                btnOpenAdmin.classList.add("hidden");
+                adminControls.classList.remove("hidden");
+                shareBar.classList.remove("hidden");
+                operatorView.classList.add("hidden");
+                supervisorView.classList.remove("hidden");
+                switchSupervisorTab("dashboard");
+                updateShareUrl();
+                refreshDashboard();
+            } else {
+                roleBadge.textContent = "MODO OPERARIO";
+                roleBadge.className = "text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+                btnOpenAdmin.classList.remove("hidden");
+                adminControls.classList.add("hidden");
+                shareBar.classList.add("hidden");
+                supervisorView.classList.add("hidden");
+                if (!operatorView.contains(document.getElementById("reportForm").parentElement)) {
+                    operatorView.prepend(document.getElementById("reportForm").parentElement);
+                }
+                operatorView.classList.remove("hidden");
+            }
+        }
+
+        function switchSupervisorTab(tab) {
+            const subDash = document.getElementById("subViewDashboard");
+            const subLogs = document.getElementById("subViewLogs");
+            const opView = document.getElementById("operatorView");
+
+            const bDash = document.getElementById("tabBtnDashboard");
+            const bLogs = document.getElementById("tabBtnLogs");
+            const bNew = document.getElementById("tabBtnNew");
+
+            [bDash, bLogs, bNew].forEach(b => b.className = "tab-inactive px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2");
+            subDash.classList.add("hidden");
+            subLogs.classList.add("hidden");
+            opView.classList.add("hidden");
+
+            if (tab === "dashboard") {
+                bDash.className = "tab-active px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2";
+                subDash.classList.remove("hidden");
+                refreshDashboard();
+            } else if (tab === "logs") {
+                bLogs.className = "tab-active px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2";
+                subLogs.classList.remove("hidden");
+                renderTable();
+            } else if (tab === "new") {
+                bNew.className = "tab-active px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2";
+                opView.classList.remove("hidden");
+            }
+        }
+
+        function getShareableOperatorLink() {
+            const baseUrl = window.location.origin + window.location.pathname;
+            const wh = getWebhookUrl();
+            if (wh) {
+                return `${baseUrl}?wh=${encodeURIComponent(wh)}`;
+            }
+            return baseUrl;
+        }
+
+        function updateShareUrl() {
+            document.getElementById("operatorUrlText").textContent = getShareableOperatorLink();
+        }
+
+        function copyOperatorLink() {
+            navigator.clipboard.writeText(getShareableOperatorLink());
+            showToast("Enlace para operarios copiado al portapapeles", "success");
+        }
+
+        function shareWhatsApp() {
+            const link = getShareableOperatorLink();
+            const text = encodeURIComponent(`Hola equipo, este es el enlace de GestiTrack para registrar los reportes diarios de mantenimiento:\n${link}`);
+            window.open(`https://wa.me/?text=${text}`, "_blank");
+        }
+
+        function openConfigModal() {
+            document.getElementById("webhookUrlInput").value = getWebhookUrl();
+            document.getElementById("newPinInput").value = localStorage.getItem("gt_pin") || "1234";
+            document.getElementById("configModal").classList.remove("hidden");
+        }
+
+        function closeConfigModal() {
+            document.getElementById("configModal").classList.add("hidden");
+        }
+
+        function saveConfig() {
+            const wh = document.getElementById("webhookUrlInput").value.trim();
+            const pin = document.getElementById("newPinInput").value.trim();
+            localStorage.setItem("gt_webhook", wh);
+            if (pin.length >= 4) {
+                localStorage.setItem("gt_pin", pin);
+            }
+            updateExcelBadge();
+            updateShareUrl();
+            closeConfigModal();
+            showToast("Configuración guardada correctamente", "success");
+        }
+
+        function copyScriptCode() {
+            const code = document.getElementById("appsScriptCode").textContent;
+            navigator.clipboard.writeText(code);
+            showToast("Código de Apps Script copiado", "success");
+        }
+
+        function refreshDashboard() {
+            document.getElementById("logCountBadge").textContent = records.length;
+
+            const total = records.length;
+            const done = records.filter(r => r.estado === "Finalizado").length;
+            const process = records.filter(r => r.estado === "En Proceso").length;
+            const pending = records.filter(r => r.estado === "Pendiente Repuesto").length;
+
+            document.getElementById("kpiTotal").textContent = total;
+            document.getElementById("kpiDone").textContent = done;
+            document.getElementById("kpiProcess").textContent = process;
+            document.getElementById("kpiPending").textContent = pending;
+
+            updateCharts();
+            populateZoneFilter();
+            renderTable();
+        }
+
+        function updateCharts() {
+            if (typeof Chart === "undefined") return;
+
+            const zonaCounts = {};
+            const tipoCounts = {};
+            const equipoCounts = {};
+
+            records.forEach(r => {
+                const z = r.zona || "Sin Zona";
+                const t = r.tipo || "Otros";
+                const eq = r.equipo || "Sin Equipo";
+                zonaCounts[z] = (zonaCounts[z] || 0) + 1;
+                tipoCounts[t] = (tipoCounts[t] || 0) + 1;
+                equipoCounts[eq] = (equipoCounts[eq] || 0) + 1;
+            });
+
+            if (charts.zonas) charts.zonas.destroy();
+            charts.zonas = new Chart(document.getElementById("chartZonas"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(zonaCounts),
+                    datasets: [{
+                        label: "Intervenciones",
+                        data: Object.values(zonaCounts),
+                        backgroundColor: "#2563eb",
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+
+            if (charts.tipos) charts.tipos.destroy();
+            charts.tipos = new Chart(document.getElementById("chartTipos"), {
+                type: "doughnut",
+                data: {
+                    labels: Object.keys(tipoCounts),
+                    datasets: [{
+                        data: Object.values(tipoCounts),
+                        backgroundColor: ["#ef4444", "#3b82f6", "#10b981", "#f59e0b"]
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } } }
+            });
+
+            const topEquipos = Object.entries(equipoCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            if (charts.equipos) charts.equipos.destroy();
+            charts.equipos = new Chart(document.getElementById("chartEquipos"), {
+                type: "bar",
+                data: {
+                    labels: topEquipos.map(e => e[0]),
+                    datasets: [{
+                        label: "Fallas / Trabajos",
+                        data: topEquipos.map(e => e[1]),
+                        backgroundColor: "#059669",
+                        borderRadius: 6
+                    }]
+                },
+                options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        function populateZoneFilter() {
+            const sel = document.getElementById("filterZona");
+            const current = sel.value;
+            const zonas = [...new Set(records.map(r => r.zona).filter(Boolean))];
+            sel.innerHTML = '<option value="">Todas las Zonas</option>' + zonas.map(z => `<option value="${z}">${z}</option>`).join("");
+            sel.value = current;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById("logsTableBody");
+            const q = document.getElementById("filterSearch").value.toLowerCase();
+            const fZona = document.getElementById("filterZona").value;
+            const fEstado = document.getElementById("filterEstado").value;
+
+            const filtered = records.filter(r => {
+                const matchText = !q || JSON.stringify(r).toLowerCase().includes(q);
+                const matchZona = !fZona || r.zona === fZona;
+                const matchEstado = !fEstado || r.estado === fEstado;
+                return matchText && matchZona && matchEstado;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">No se encontraron intervenciones con esos filtros.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(r => {
+                let badgeClass = "bg-emerald-100 text-emerald-700";
+                if (r.estado === "En Proceso") badgeClass = "bg-amber-100 text-amber-700";
+                if (r.estado === "Pendiente Repuesto") badgeClass = "bg-rose-100 text-rose-700";
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="py-3 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">${r.fecha || ""}</td>
+                        <td class="py-3 px-4 font-semibold text-slate-700">${r.zona || ""}</td>
+                        <td class="py-3 px-4 font-bold text-blue-700">${r.equipo || ""}</td>
+                        <td class="py-3 px-4 text-slate-600">${r.tipo || ""}</td>
+                        <td class="py-3 px-4 text-slate-600 max-w-xs truncate" title="${r.descripcion || ""}">${r.descripcion || ""}</td>
+                        <td class="py-3 px-4 font-medium text-slate-700">${r.operario || ""}</td>
+                        <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${badgeClass}">${r.estado || ""}</span></td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function exportCSV() {
+            if (records.length === 0) {
+                showToast("No hay datos para exportar", "warning");
+                return;
+            }
+            const headers = ["ID", "Fecha", "Zona", "Equipo", "Tipo", "Descripcion", "Operario", "Estado"];
+            const rows = records.map(r => [r.id, r.fecha, r.zona, r.equipo, r.tipo, `"${(r.descripcion || "").replace(/"/g, '""')}"`, r.operario, r.estado]);
+            const csv = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Reporte_Mantenimiento_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        function clearLocalCache() {
+            if (confirm("¿Deseas limpiar la memoria local de este navegador? (Los datos guardados en tu Google Sheets no se borrarán).")) {
+                records = [];
+                saveLocalRecords();
+                refreshDashboard();
+                showToast("Caché local limpiada", "success");
+            }
+        }
+
+        function showToast(msg, type = "success") {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toastIcon");
+            document.getElementById("toastMsg").textContent = msg;
+
+            if (type === "error") icon.className = "fa-solid fa-circle-xmark text-rose-400 text-base";
+            else if (type === "warning") icon.className = "fa-solid fa-triangle-exclamation text-amber-400 text-base";
+            else icon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
+
+            toast.classList.remove("translate-y-20", "opacity-0");
+            setTimeout(() => toast.classList.add("translate-y-20", "opacity-0"), 3500);
+        }
+    </script>
+</body>
+</html>
