@@ -413,26 +413,21 @@ function doGet(e) {
     </div>
 
     <!-- ========================================================= -->
-    <!-- LÓGICA JAVASCRIPT SIN BLOQUEOS                            -->
+    <!-- LÓGICA JAVASCRIPT: FORZADO ESTRICTO A MODO OPERARIO      -->
     <!-- ========================================================= -->
     <script>
-        // URL por defecto si el supervisor la deja configurada o la pasa por parámetro ?webhook=
         const DEFAULT_WEBHOOK = "";
         let records = [];
         let charts = { zonas: null, tipos: null, equipos: null };
-        let isAdmin = false;
+        let isAdmin = false; // POR DEFECTO SIEMPRE INICIA COMO FALSO (MODO OPERARIO)
 
-        // Inicialización inmediata al cargar el DOM
         document.addEventListener("DOMContentLoaded", () => {
             setDefaultDateTime();
             loadConfigFromUrlOrStorage();
             loadLocalRecords();
 
-            // Verificar si entra forzado como operario (?modo=operario)
-            const params = new URLSearchParams(window.location.search);
-            if (params.get("modo") === "operario") {
-                isAdmin = false;
-            }
+            // FUERZA ESTRICTA: Por defecto nadie es admin al entrar al link principal
+            isAdmin = false; 
             updateUIByRole();
         });
 
@@ -522,7 +517,6 @@ function doGet(e) {
                 showToast("Reporte guardado en bitácora local", "success");
             }
 
-            // Limpiar campos manteniendo el nombre del operario para comodidad
             const opName = document.getElementById("f_operario").value;
             document.getElementById("reportForm").reset();
             document.getElementById("f_operario").value = opName;
@@ -558,7 +552,7 @@ function doGet(e) {
                 const res = await fetch(webhook);
                 const data = await res.json();
                 if (Array.isArray(data)) {
-                    records = data.reverse(); // Más recientes primero
+                    records = data.reverse();
                     saveLocalRecords();
                     refreshDashboard();
                     showToast(`Sincronizados ${records.length} registros desde Excel`, "success");
@@ -573,7 +567,7 @@ function doGet(e) {
             }
         }
 
-        // --- GESTIÓN DE ROLES (OPERARIO VS SUPERVISOR) ---
+        // --- GESTIÓN DE ROLES (SOLO SE ABRE CON PIN DE SUPERVISOR) ---
         function openPinModal() {
             document.getElementById("pinInput").value = "";
             document.getElementById("pinModal").classList.remove("hidden");
@@ -632,7 +626,6 @@ function doGet(e) {
                 adminControls.classList.add("hidden");
                 shareBar.classList.add("hidden");
                 supervisorView.classList.add("hidden");
-                // Asegurar que el formulario vuelva a la vista operario si se movió
                 if (!operatorView.contains(document.getElementById("reportForm").parentElement)) {
                     operatorView.prepend(document.getElementById("reportForm").parentElement);
                 }
@@ -668,14 +661,13 @@ function doGet(e) {
             }
         }
 
-        // --- ENLACE PARA COMPARTIR CON OPERARIOS (INCLUYE WEBHOOK AUTOMÁTICO) ---
         function getShareableOperatorLink() {
             const baseUrl = window.location.origin + window.location.pathname;
             const wh = getWebhookUrl();
             if (wh) {
-                return `${baseUrl}?modo=operario&wh=${encodeURIComponent(wh)}`;
+                return `${baseUrl}?wh=${encodeURIComponent(wh)}`;
             }
-            return `${baseUrl}?modo=operario`;
+            return baseUrl;
         }
 
         function updateShareUrl() {
@@ -689,12 +681,10 @@ function doGet(e) {
 
         function shareWhatsApp() {
             const link = getShareableOperatorLink();
-            const text = encodeURIComponent(`Hola equipo, este es el enlace de GestiTrack para registrar los reportes diarios de mantenimiento:
-${link}`);
+            const text = encodeURIComponent(`Hola equipo, este es el enlace de GestiTrack para registrar los reportes diarios de mantenimiento:\n${link}`);
             window.open(`https://wa.me/?text=${text}`, "_blank");
         }
 
-        // --- CONFIGURACIÓN EXCEL / PIN ---
         function openConfigModal() {
             document.getElementById("webhookUrlInput").value = getWebhookUrl();
             document.getElementById("newPinInput").value = localStorage.getItem("gt_pin") || "1234";
@@ -724,7 +714,6 @@ ${link}`);
             showToast("Código de Apps Script copiado", "success");
         }
 
-        // --- DASHBOARD, KPIs Y GRÁFICOS ---
         function refreshDashboard() {
             document.getElementById("logCountBadge").textContent = records.length;
 
@@ -746,7 +735,6 @@ ${link}`);
         function updateCharts() {
             if (typeof Chart === "undefined") return;
 
-            // Agrupar por Zona
             const zonaCounts = {};
             const tipoCounts = {};
             const equipoCounts = {};
@@ -760,7 +748,6 @@ ${link}`);
                 equipoCounts[eq] = (equipoCounts[eq] || 0) + 1;
             });
 
-            // 1. Gráfico Zonas
             if (charts.zonas) charts.zonas.destroy();
             charts.zonas = new Chart(document.getElementById("chartZonas"), {
                 type: "bar",
@@ -776,7 +763,6 @@ ${link}`);
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
 
-            // 2. Gráfico Tipos
             if (charts.tipos) charts.tipos.destroy();
             charts.tipos = new Chart(document.getElementById("chartTipos"), {
                 type: "doughnut",
@@ -790,7 +776,6 @@ ${link}`);
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } } }
             });
 
-            // 3. Top Equipos
             const topEquipos = Object.entries(equipoCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
             if (charts.equipos) charts.equipos.destroy();
             charts.equipos = new Chart(document.getElementById("chartEquipos"), {
@@ -860,8 +845,7 @@ ${link}`);
             }
             const headers = ["ID", "Fecha", "Zona", "Equipo", "Tipo", "Descripcion", "Operario", "Estado"];
             const rows = records.map(r => [r.id, r.fecha, r.zona, r.equipo, r.tipo, `"${(r.descripcion || "").replace(/"/g, '""')}"`, r.operario, r.estado]);
-            const csv = "﻿" + [headers.join(","), ...rows.map(e => e.join(","))].join("
-");
+            const csv = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
